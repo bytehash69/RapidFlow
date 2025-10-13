@@ -1,6 +1,12 @@
 use anchor_lang::prelude::*;
 
+pub mod instructions;
+pub use instructions::*;
+
 declare_id!("5hZHJEeFN45bz4xYu1A2RHwtfapTHiq1j8yroVnvjPtQ");
+
+pub mod state;
+pub use state::*;
 
 #[program]
 pub mod rapid_flow {
@@ -11,6 +17,3 @@ pub mod rapid_flow {
         Ok(())
     }
 }
-
-#[derive(Accounts)]
-pub struct Initialize {}
