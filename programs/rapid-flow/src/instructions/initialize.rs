@@ -67,3 +67,34 @@ pub struct Initialize<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
+
+impl<'info> Initialize<'info> {
+    pub fn initialize(&mut self) -> Result<()> {
+        self.market.set_inner(Market {
+            authority: self.signer.key(),
+            base_mint: self.base_mint.key(),
+            quote_mint: self.quote_mint.key(),
+            base_vault: self.base_vault.key(),
+            quote_vault: self.quote_vault.key(),
+            bids: self.bids.key(),
+            asks: self.asks.key(),
+            bump: self.market.bump,
+        });
+
+        self.bids.set_inner(OrderBook {
+            market: self.market.key(),
+            is_bid: true,
+            orders: Vec::new(),
+            bump: self.bids.bump,
+        });
+
+        self.asks.set_inner(OrderBook {
+            market: self.market.key(),
+            is_bid: false,
+            orders: Vec::new(),
+            bump: self.asks.bump,
+        });
+
+        Ok(())
+    }
+}

@@ -10,11 +10,11 @@ pub struct OrderBook {
 
 #[account]
 pub struct BookOrder {
-    pub order_id: u64,
+    pub order_id: u128,
     pub owner: Pubkey,
     pub price: u64,
     pub size: u64,
-    pub timestamp: u64,
+    pub timestamp: i64,
 }
 
 #[account]
