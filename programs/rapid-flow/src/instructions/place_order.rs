@@ -60,7 +60,7 @@ pub struct PlaceOrder<'info> {
     #[account(
         mut,
         associated_token::mint = market.base_mint,
-        associated_token::authority = market,
+        associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
     pub user_base_vault: Account<'info, TokenAccount>,
@@ -68,7 +68,7 @@ pub struct PlaceOrder<'info> {
     #[account(
         mut,
         associated_token::mint = market.quote_mint,
-        associated_token::authority = market,
+        associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
     pub user_quote_vault: Account<'info, TokenAccount>,
@@ -81,10 +81,8 @@ pub struct PlaceOrder<'info> {
 impl<'info> PlaceOrder<'info> {
     pub fn place_order(&mut self, is_bid: bool, price: u64, size: u64) -> Result<()> {
         let clock = Clock::get()?;
-        // Generate unique order ID
         let order_id = clock.unix_timestamp as u128;
 
-        // open orders for the first time
         if self.open_orders.owner == Pubkey::default() {
             self.open_orders.owner = self.signer.key();
             self.open_orders.market = self.market.key();
@@ -92,6 +90,44 @@ impl<'info> PlaceOrder<'info> {
             self.open_orders.base_locked = 0;
             self.open_orders.quote_free = 0;
             self.open_orders.quote_locked = 0;
+        }
+
+        let required_amount = if is_bid {
+            price.checked_mul(size).ok_or(ErrorCode::MathOverflow)?
+        } else {
+            size
+        };
+        let cpi_program = self.token_program.to_account_info();
+
+        let cpi_accounts = if is_bid {
+            Transfer {
+                authority: self.signer.to_account_info(),
+                from: self.user_quote_vault.to_account_info(),
+                to: self.quote_vault.to_account_info(),
+            }
+        } else {
+            Transfer {
+                authority: self.signer.to_account_info(),
+                from: self.user_base_vault.to_account_info(),
+                to: self.base_vault.to_account_info(),
+            }
+        };
+
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        transfer(cpi_ctx, required_amount)?;
+
+        if is_bid {
+            self.open_orders.quote_locked = self
+                .open_orders
+                .quote_locked
+                .checked_add(required_amount)
+                .ok_or(ErrorCode::MathOverflow)?;
+        } else {
+            self.open_orders.base_locked = self
+                .open_orders
+                .base_locked
+                .checked_add(required_amount)
+                .ok_or(ErrorCode::MathOverflow)?;
         }
 
         let mut remaining_size = size;
@@ -105,17 +141,33 @@ impl<'info> PlaceOrder<'info> {
 
                 if price >= ask_orders.price {
                     let match_size = remaining_size.min(ask_orders.size);
-                    let match_value = ask_orders.price.checked_mul(match_size).unwrap(); // handle custom errors
+                    let match_value = ask_orders
+                        .price
+                        .checked_mul(match_size)
+                        .ok_or(ErrorCode::MathOverflow)?;
 
-                    self.open_orders.quote_locked -= match_value;
-                    self.open_orders.base_free += match_size;
+                    self.open_orders.quote_locked = self
+                        .open_orders
+                        .quote_locked
+                        .checked_sub(match_value)
+                        .ok_or(ErrorCode::InsufficientFunds)?;
+                    self.open_orders.base_free = self
+                        .open_orders
+                        .base_free
+                        .checked_add(match_size)
+                        .ok_or(ErrorCode::MathOverflow)?;
 
-                    remaining_size -= match_size;
+                    remaining_size = remaining_size
+                        .checked_sub(match_size)
+                        .ok_or(ErrorCode::MathOverflow)?;
 
                     if match_size >= ask_orders.size {
                         asks.orders.remove(i);
                     } else {
-                        asks.orders[i].size -= match_size;
+                        asks.orders[i].size = asks.orders[i]
+                            .size
+                            .checked_sub(match_size)
+                            .ok_or(ErrorCode::MathOverflow)?;
                         i += 1
                     }
                 } else {
@@ -131,17 +183,34 @@ impl<'info> PlaceOrder<'info> {
 
                 if price <= bid_orders.price {
                     let match_size = remaining_size.min(bid_orders.size);
-                    let match_value = bid_orders.price.checked_mul(match_size).unwrap(); // handle custom errors
+                    let match_value = bid_orders
+                        .price
+                        .checked_mul(match_size)
+                        .ok_or(ErrorCode::MathOverflow)?;
 
-                    self.open_orders.quote_locked -= match_value;
-                    self.open_orders.base_free += match_size;
+                    self.open_orders.base_locked = self
+                        .open_orders
+                        .base_locked
+                        .checked_sub(match_size)
+                        .ok_or(ErrorCode::InsufficientFunds)?;
 
-                    remaining_size -= match_size;
+                    self.open_orders.quote_free = self
+                        .open_orders
+                        .quote_free
+                        .checked_add(match_value)
+                        .ok_or(ErrorCode::MathOverflow)?;
+
+                    remaining_size = remaining_size
+                        .checked_sub(match_size)
+                        .ok_or(ErrorCode::MathOverflow)?;
 
                     if match_size >= bid_orders.size {
                         bids.orders.remove(i);
                     } else {
-                        bids.orders[i].size -= match_size;
+                        bids.orders[i].size = bids.orders[i]
+                            .size
+                            .checked_sub(match_size)
+                            .ok_or(ErrorCode::MathOverflow)?;
                         i += 1
                     }
                 } else {
@@ -152,11 +221,11 @@ impl<'info> PlaceOrder<'info> {
 
         if remaining_size > 0 {
             let new_order = Order {
-                order_id, // todo
+                order_id,
                 owner: self.signer.key(),
                 price,
                 size: remaining_size,
-                timestamp: clock.unix_timestamp, // todo
+                timestamp: clock.unix_timestamp,
             };
 
             if is_bid {
@@ -172,7 +241,6 @@ impl<'info> PlaceOrder<'info> {
                 bids.orders.insert(insert_pos, new_order);
             } else {
                 let asks = &mut self.asks;
-                // Insert in sorted order (lowest price first)
                 let insert_pos = asks
                     .orders
                     .iter()
@@ -184,27 +252,14 @@ impl<'info> PlaceOrder<'info> {
             }
         }
 
-        // orderbook vec should be updated
-
-        let required_amount = if is_bid { price * size } else { size };
-        let cpi_program = self.token_program.to_account_info();
-
-        let cpi_accounts = if is_bid {
-            Transfer {
-                authority: self.signer.to_account_info(), // see this later
-                from: self.user_quote_vault.to_account_info(),
-                to: self.quote_vault.to_account_info(),
-            }
-        } else {
-            Transfer {
-                authority: self.signer.to_account_info(), // see this later
-                from: self.user_base_vault.to_account_info(),
-                to: self.base_vault.to_account_info(),
-            }
-        };
-
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        transfer(cpi_ctx, required_amount)?;
         Ok(())
     }
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("InsufficientFunds")]
+    InsufficientFunds,
+    #[msg("MathOverflow")]
+    MathOverflow,
 }
