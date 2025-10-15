@@ -168,7 +168,7 @@ impl<'info> PlaceOrder<'info> {
                             .size
                             .checked_sub(match_size)
                             .ok_or(ErrorCode::MathOverflow)?;
-                        i += 1
+                         i = i.checked_add(1).unwrap_or(usize::MAX);
                     }
                 } else {
                     break;
@@ -211,7 +211,7 @@ impl<'info> PlaceOrder<'info> {
                             .size
                             .checked_sub(match_size)
                             .ok_or(ErrorCode::MathOverflow)?;
-                        i += 1
+                       i = i.checked_add(1).unwrap_or(usize::MAX);
                     }
                 } else {
                     break;

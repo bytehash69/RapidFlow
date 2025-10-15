@@ -26,4 +26,8 @@ pub mod rapid_flow {
         ctx.accounts.place_order(is_bid, price, size)?;
         Ok(())
     }
+
+    pub fn cancel_order(ctx: Context<CancelOrder>, order_id: u128, is_bid: bool) -> Result<()> {
+        ctx.accounts.cancel_order(order_id, is_bid)
+    }
 }

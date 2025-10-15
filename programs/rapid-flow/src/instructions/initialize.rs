@@ -9,13 +9,12 @@ use crate::*;
 
 pub const MAX_ORDERS: usize = 128;
 pub const ORDER_BOOK_SPACE: usize = 8 + 32 + 1 + 4 + (MAX_ORDERS * 72);
-
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
-    pub base_mint: Account<'info, Mint>, // sol
+    pub base_mint: Account<'info, Mint>,  // sol
     pub quote_mint: Account<'info, Mint>, // usdc
 
     #[account(
@@ -34,7 +33,7 @@ pub struct Initialize<'info> {
         seeds = [b"bids", market.key().as_ref()],
         bump
     )]
-    pub bids: Account<'info, OrderBook>, 
+    pub bids: Account<'info, OrderBook>,
 
     #[account(
         init,
