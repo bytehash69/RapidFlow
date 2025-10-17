@@ -10,6 +10,7 @@ pub struct OrderBook {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct Order {
     // single order
     pub order_id: u128,

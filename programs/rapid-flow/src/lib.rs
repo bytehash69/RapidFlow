@@ -27,6 +27,11 @@ pub mod rapid_flow {
         Ok(())
     }
 
+    pub fn settle_funds(ctx: Context<SettleFunds>) -> Result<()> {
+        ctx.accounts.settle_funds()?;
+        Ok(())
+    }
+
     pub fn cancel_order(ctx: Context<CancelOrder>, order_id: u128, is_bid: bool) -> Result<()> {
         ctx.accounts.cancel_order(order_id, is_bid)
     }
