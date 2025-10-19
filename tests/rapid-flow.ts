@@ -284,7 +284,7 @@ it("Ask order placed successfully", async() => {
       quoteVault,
       userBaseVault: BobBaseVault,
       userQuoteVault: BobQuoteVault
-    }).signers([BobWallet]).rpc();
+    }).remainingAccounts([{pubkey: AliceOpenOrdersPda, isSigner: false, isWritable: true}]).signers([BobWallet]).rpc();
 
     const BobBaseAccount = await getAccount(connection, BobBaseVault);
     const BobQuoteAccount = await getAccount(connection, BobQuoteVault);
@@ -313,5 +313,24 @@ it("Ask order placed successfully", async() => {
       console.log("OpenOrders account not found or not initialized yet");
       return null;
     }
+  })
+
+  it("Checked balance: ", async() => {
+    try {
+      // Fetch the account data
+      const openOrdersAccount = await program.account.openOrders.fetch(AliceOpenOrdersPda);
+      
+      console.log("\n========== Alice Open Orders Data ==========");
+      console.log("Owner:", openOrdersAccount.owner.toBase58());
+      console.log("Market:", openOrdersAccount.market.toBase58());
+      console.log("Base Free:", openOrdersAccount.baseFree.toString());
+      console.log("Base Locked:", openOrdersAccount.baseLocked.toString());
+      console.log("Quote Free:", openOrdersAccount.quoteFree.toString());
+      console.log("Quote Locked:", openOrdersAccount.quoteLocked.toString());
+    } catch (error) {
+      console.log("OpenOrders account not found or not initialized yet");
+      return null;
+    }
+
   })
 });
