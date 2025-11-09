@@ -100,8 +100,21 @@ impl<'info> PlaceOrder<'info> {
             self.user_open_orders.quote_locked = 0;
         }
 
-        // Matching logic FIRST (before locking funds)
+        // Store original size for token transfer
+        let original_size = size;
+
         if is_bid {
+            // ✅ TRANSFER QUOTE TOKENS FIRST (before matching)
+            let quote_amount = price.checked_mul(original_size).ok_or(ErrorCode::MathOverflow)?;
+            
+            let cpi_accounts = Transfer {
+                authority: self.signer.to_account_info(),
+                from: self.user_quote_vault.to_account_info(),
+                to: self.quote_vault.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new(self.token_program.to_account_info(), cpi_accounts);
+            transfer(cpi_ctx, quote_amount)?;
+
             // Buy order: match against asks (sellers)
             let asks = &mut self.asks;
             let mut i = 0;
@@ -188,22 +201,14 @@ impl<'info> PlaceOrder<'info> {
                 }
             }
 
-            // Lock funds and add to book ONLY for remaining unfilled size
+            // Lock ONLY remaining unfilled size
             if size > 0 {
-                let amount = price.checked_mul(size).ok_or(ErrorCode::MathOverflow)?;
-
-                let cpi_accounts = Transfer {
-                    authority: self.signer.to_account_info(),
-                    from: self.user_quote_vault.to_account_info(),
-                    to: self.quote_vault.to_account_info(),
-                };
-                let cpi_ctx = CpiContext::new(self.token_program.to_account_info(), cpi_accounts);
-                transfer(cpi_ctx, amount)?;
-
+                let unfilled_quote_amount = price.checked_mul(size).ok_or(ErrorCode::MathOverflow)?;
+                
                 self.user_open_orders.quote_locked = self
                     .user_open_orders
                     .quote_locked
-                    .checked_add(amount)
+                    .checked_add(unfilled_quote_amount)
                     .ok_or(ErrorCode::MathOverflow)?;
 
                 self.bids.orders.push(Order {
@@ -215,6 +220,15 @@ impl<'info> PlaceOrder<'info> {
                 });
             }
         } else {
+            // ✅ TRANSFER BASE TOKENS FIRST (before matching)
+            let cpi_accounts = Transfer {
+                authority: self.signer.to_account_info(),
+                from: self.user_base_vault.to_account_info(),
+                to: self.base_vault.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new(self.token_program.to_account_info(), cpi_accounts);
+            transfer(cpi_ctx, original_size)?;
+
             // Sell order: match against bids (buyers)
             let bids = &mut self.bids;
             let mut i = 0;
@@ -301,16 +315,8 @@ impl<'info> PlaceOrder<'info> {
                 }
             }
 
-            // Lock funds and add to book ONLY for remaining unfilled size
+            // Lock ONLY remaining unfilled size
             if size > 0 {
-                let cpi_accounts = Transfer {
-                    authority: self.signer.to_account_info(),
-                    from: self.user_base_vault.to_account_info(),
-                    to: self.base_vault.to_account_info(),
-                };
-                let cpi_ctx = CpiContext::new(self.token_program.to_account_info(), cpi_accounts);
-                transfer(cpi_ctx, size)?;
-
                 self.user_open_orders.base_locked = self
                     .user_open_orders
                     .base_locked
