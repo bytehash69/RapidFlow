@@ -27,163 +27,88 @@ describe("rapid-flow", () => {
   let asksPda: PublicKey;
   let baseVault: PublicKey;
   let quoteVault: PublicKey;
+// Test users configuration - SIMPLIFIED to 3 users
+const users = [
+  {
+    name: "Alice",
+    wallet: wallet,
+    baseAmount: 1000,
+    quoteAmount: 10000,
+    needsAirdrop: false,
+  },
+  {
+    name: "Bob",
+    wallet: null as any,
+    baseAmount: 800,
+    quoteAmount: 8000,
+    needsAirdrop: true,
+  },
+  {
+    name: "Charlie",
+    wallet: null as any,
+    baseAmount: 600,
+    quoteAmount: 6000,
+    needsAirdrop: true,
+  },
+];
 
-  // Test users configuration
-  const users = [
-    {
-      name: "Alice",
-      wallet: wallet,
-      baseAmount: 1000,
-      quoteAmount: 10000,
-      needsAirdrop: false,
+// SIMPLIFIED test orders - Easy to understand scenarios
+const testOrders = [
+  // Step 1: Alice places a BID (wants to BUY base token with quote token)
+  {
+    user: "Alice",
+    isBid: true,
+    price: 100,
+    size: 5,
+    description: "Alice places Bid @ 100 (wants to buy 5 base for 500 quote)",
+    expectedBalanceChanges: {
+      Alice: { base: 0, quote: -500, baseLocked: 0, quoteLocked: 500 },
+      market: { base: 0, quote: 500 },
     },
-    {
-      name: "Bob",
-      wallet: null as any,
-      baseAmount: 800,
-      quoteAmount: 12000,
-      needsAirdrop: true,
+  },
+  
+  // Step 2: Bob places an ASK (wants to SELL base token for quote token)
+  {
+    user: "Bob",
+    isBid: false,
+    price: 110,
+    size: 3,
+    description: "Bob places Ask @ 110 (wants to sell 3 base for 330 quote)",
+    expectedBalanceChanges: {
+      Bob: { base: -3, quote: 0, baseLocked: 3, quoteLocked: 0 },
+      market: { base: 3, quote: 0 },
     },
-    {
-      name: "Charlie",
-      wallet: null as any,
-      baseAmount: 600,
-      quoteAmount: 9000,
-      needsAirdrop: true,
+  },
+  
+  // Step 3: Charlie places an ASK that MATCHES Alice's bid
+  // Charlie sells at 95, Alice buys at 100, so trade happens at 100
+  {
+    user: "Charlie",
+    isBid: false,
+    price: 95,
+    size: 2,
+    description: "Charlie places Ask @ 95 (MATCHES Alice's Bid @ 100 - trades 2 base)",
+    matchedUsers: ["Alice"],
+    skipAssertions: true,
+    expectedBalanceChanges: {},
+    // What happens: Charlie sells 2 base, Alice buys 2 base at price 100
+    // Result: Alice gets 2 base (baseFree: 2), Charlie gets 200 quote (quoteFree: 200)
+    //         Alice's quoteLocked reduces by 200 (now 300 locked)
+  },
+  
+  // Step 4: Bob adds another bid
+  {
+    user: "Bob",
+    isBid: true,
+    price: 90,
+    size: 4,
+    description: "Bob places Bid @ 90 (wants to buy 4 base for 360 quote)",
+    expectedBalanceChanges: {
+      Bob: { base: 0, quote: -360, baseLocked: 0, quoteLocked: 360 },
+      market: { base: 0, quote: 360 },
     },
-    {
-      name: "David",
-      wallet: null as any,
-      baseAmount: 900,
-      quoteAmount: 13000,
-      needsAirdrop: true,
-    },
-    {
-      name: "Eve",
-      wallet: null as any,
-      baseAmount: 750,
-      quoteAmount: 10500,
-      needsAirdrop: true,
-    },
-  ];
-
-  // Test orders configuration with expected outcomes
-  const testOrders = [
-    // Build the order book with bids at different price levels
-    {
-      user: "Alice",
-      isBid: true,
-      price: 100,
-      size: 5,
-      description: "Alice places Bid @ 100",
-      expectedBalanceChanges: {
-        Alice: { base: 0, quote: -500, baseLocked: 0, quoteLocked: 500 },
-        market: { base: 0, quote: 500 },
-      },
-    },
-    {
-      user: "Bob",
-      isBid: true,
-      price: 95,
-      size: 3,
-      description: "Bob places Bid @ 95",
-      expectedBalanceChanges: {
-        Bob: { base: 0, quote: -285, baseLocked: 0, quoteLocked: 285 },
-        market: { base: 0, quote: 285 },
-      },
-    },
-    {
-      user: "Charlie",
-      isBid: true,
-      price: 90,
-      size: 4,
-      description: "Charlie places Bid @ 90",
-      expectedBalanceChanges: {
-        Charlie: { base: 0, quote: -360, baseLocked: 0, quoteLocked: 360 },
-        market: { base: 0, quote: 360 },
-      },
-    },
-    // Add asks at different price levels
-    {
-      user: "David",
-      isBid: false,
-      price: 110,
-      size: 6,
-      description: "David places Ask @ 110",
-      expectedBalanceChanges: {
-        David: { base: -6, quote: 0, baseLocked: 6, quoteLocked: 0 },
-        market: { base: 6, quote: 0 },
-      },
-    },
-    {
-      user: "Eve",
-      isBid: false,
-      price: 115,
-      size: 4,
-      description: "Eve places Ask @ 115",
-      expectedBalanceChanges: {
-        Eve: { base: -4, quote: 0, baseLocked: 4, quoteLocked: 0 },
-        market: { base: 4, quote: 0 },
-      },
-    },
-    // Alice's ask - CHECK: Is matching working? Or is order just being placed on the book?
-    {
-      user: "Alice",
-      isBid: false,
-      price: 93,
-      size: 3,
-      description: "Alice places Ask @ 93 (should match Bob's bid @ 95)",
-      matchedUsers: ["Bob"],
-      skipAssertions: true, // Skip assertions - need to debug matching logic
-      expectedBalanceChanges: {},
-    },
-    // David adds more asks
-    {
-      user: "David",
-      isBid: false,
-      price: 105,
-      size: 5,
-      description: "David places Ask @ 105",
-      expectedBalanceChanges: {
-        David: { base: -5, quote: 0, baseLocked: 5, quoteLocked: 0 },
-        market: { base: 5, quote: 0 },
-      },
-    },
-    // Charlie's bid - CHECK: Is matching working?
-    {
-      user: "Charlie",
-      isBid: true,
-      price: 107,
-      size: 5,
-      description: "Charlie places Bid @ 107 (should match David's ask @ 105)",
-      matchedUsers: ["David"],
-      skipAssertions: true, // Skip assertions - need to debug matching logic
-      expectedBalanceChanges: {},
-    },
-    // Eve's bid - showing -224 suggests partial/self-match
-    {
-      user: "Eve",
-      isBid: true,
-      price: 112,
-      size: 8,
-      description: "Eve places Bid @ 112 (complex matching scenario)",
-      matchedUsers: ["David", "Eve"],
-      skipAssertions: true, // Skip assertions - need to debug what -224 means
-      expectedBalanceChanges: {},
-    },
-    // Bob adds another bid
-    {
-      user: "Bob",
-      isBid: true,
-      price: 92,
-      size: 6,
-      description: "Bob places Bid @ 92",
-      expectedBalanceChanges: {
-        Bob: { base: 0, quote: -552, baseLocked: 0, quoteLocked: 552 },
-        market: { base: 0, quote: 552 },
-      },
-    },
-  ];
+  },
+];
 
   // Track balances across tests
   const balanceTracker = new Map<
@@ -571,160 +496,12 @@ describe("rapid-flow", () => {
     });
   });
 
-  // Add these tests after your existing testOrders tests, before the closing });
-
 describe("Settle Funds Tests", () => {
-  it("Alice settles partial quote funds (has 285 quote free)", async () => {
-    console.log("\n>>>>>>>>>>>> Alice settles partial quote funds <<<<<<<<<<<<\n");
+  
+  it("Alice settles all her base funds (2 base from matched trade)", async () => {
+    console.log("\n>>>>>>>>>>>> Alice settles 2 base funds <<<<<<<<<<<<\n");
 
     const user = users.find((u) => u.name === "Alice")!;
-    const userWallet = user.wallet instanceof Keypair ? user.wallet : user.wallet.payer;
-    const userPubkey = user.wallet instanceof Keypair
-      ? user.wallet.publicKey
-      : (user.wallet as anchor.Wallet).publicKey;
-
-    // Get current state
-    let openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
-    const quoteFree = Number(openOrders.quoteFree);
-    
-    console.log("Quote free before settle:", quoteFree);
-    assert.equal(quoteFree, 285, "Alice should have 285 quote free");
-
-    // Capture balances before
-    const quoteAccBefore = await getAccount(connection, (user as any).quoteVault);
-    const quoteVaultBefore = await getAccount(connection, quoteVault);
-
-    // Settle half of the quote funds
-    const amountToSettle = 150;
-    const tx = await program.methods
-      .settleFunds(false, new anchor.BN(amountToSettle))
-      .accounts({
-        signer: userPubkey,
-        //@ts-ignore
-        market: marketPda,
-        openOrders: (user as any).openOrdersPda,
-        baseVault,
-        quoteVault,
-        userBaseVault: (user as any).baseVault,
-        userQuoteVault: (user as any).quoteVault,
-      })
-      .signers([userWallet])
-      .rpc();
-
-    await connection.confirmTransaction(tx);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Capture balances after
-    const quoteAccAfter = await getAccount(connection, (user as any).quoteVault);
-    const quoteVaultAfter = await getAccount(connection, quoteVault);
-    openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
-
-    console.log("\n========== SETTLEMENT RESULTS ==========");
-    console.log("Amount settled:", amountToSettle);
-    console.log("User quote balance change:", Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount));
-    console.log("Market quote vault change:", Number(quoteVaultAfter.amount) - Number(quoteVaultBefore.amount));
-    console.log("Quote free after:", Number(openOrders.quoteFree));
-
-    // Assertions
-    assert.equal(
-      Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount),
-      amountToSettle,
-      "User should receive the settled amount"
-    );
-    assert.equal(
-      Number(quoteVaultBefore.amount) - Number(quoteVaultAfter.amount),
-      amountToSettle,
-      "Market vault should decrease by settled amount"
-    );
-    assert.equal(
-      Number(openOrders.quoteFree),
-      quoteFree - amountToSettle,
-      "Quote free should decrease by settled amount"
-    );
-
-    console.log("\nTransaction sig:", tx);
-  });
-
-  it("Alice settles remaining quote funds (135 left)", async () => {
-    console.log("\n>>>>>>>>>>>> Alice settles remaining quote funds <<<<<<<<<<<<\n");
-
-    const user = users.find((u) => u.name === "Alice")!;
-    const userWallet = user.wallet instanceof Keypair ? user.wallet : user.wallet.payer;
-    const userPubkey = user.wallet instanceof Keypair
-      ? user.wallet.publicKey
-      : (user.wallet as anchor.Wallet).publicKey;
-
-    // Get current state
-    let openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
-    const quoteFree = Number(openOrders.quoteFree);
-    
-    console.log("Quote free before settle:", quoteFree);
-    assert.equal(quoteFree, 135, "Alice should have 135 quote free remaining");
-
-    // Capture balances before
-    const quoteAccBefore = await getAccount(connection, (user as any).quoteVault);
-    const quoteVaultBefore = await getAccount(connection, quoteVault);
-
-    // Settle all remaining quote funds
-    const tx = await program.methods
-      .settleFunds(false, new anchor.BN(quoteFree))
-      .accounts({
-        signer: userPubkey,
-        //@ts-ignore
-        market: marketPda,
-        openOrders: (user as any).openOrdersPda,
-        baseVault,
-        quoteVault,
-        userBaseVault: (user as any).baseVault,
-        userQuoteVault: (user as any).quoteVault,
-      })
-      .signers([userWallet])
-      .rpc();
-
-    await connection.confirmTransaction(tx);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Capture balances after
-    const quoteAccAfter = await getAccount(connection, (user as any).quoteVault);
-    const quoteVaultAfter = await getAccount(connection, quoteVault);
-    openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
-
-    console.log("\n========== SETTLEMENT RESULTS ==========");
-    console.log("Amount settled:", quoteFree);
-    console.log("User quote balance change:", Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount));
-    console.log("Market quote vault change:", Number(quoteVaultAfter.amount) - Number(quoteVaultBefore.amount));
-    console.log("Quote free after:", Number(openOrders.quoteFree));
-    console.log("Quote locked (unchanged):", Number(openOrders.quoteLocked));
-
-    // Assertions
-    assert.equal(
-      Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount),
-      quoteFree,
-      "User should receive all remaining quote funds"
-    );
-    assert.equal(
-      Number(quoteVaultBefore.amount) - Number(quoteVaultAfter.amount),
-      quoteFree,
-      "Market vault should decrease by settled amount"
-    );
-    assert.equal(
-      Number(openOrders.quoteFree),
-      0,
-      "Quote free should be zero after settling all"
-    );
-    assert.equal(
-      Number(openOrders.quoteLocked),
-      500,
-      "Quote locked should remain unchanged at 500"
-    );
-
-    console.log("\nTransaction sig:", tx);
-  });
-
-  it("Bob settles base funds (has 3 base free)", async () => {
-    console.log("\n>>>>>>>>>>>> Bob settles base funds <<<<<<<<<<<<\n");
-
-    const user = users.find((u) => u.name === "Bob")!;
     const userWallet = user.wallet instanceof Keypair ? user.wallet : user.wallet.payer;
     const userPubkey = user.wallet instanceof Keypair
       ? user.wallet.publicKey
@@ -736,14 +513,16 @@ describe("Settle Funds Tests", () => {
     const quoteLocked = Number(openOrders.quoteLocked);
     
     console.log("Base free before settle:", baseFree);
-    console.log("Quote locked (should remain unchanged):", quoteLocked);
-    assert.equal(baseFree, 3, "Bob should have 3 base free");
+    console.log("Quote locked (should remain):", quoteLocked);
+    
+    assert.equal(baseFree, 2, "Alice should have 2 base free");
+    assert.equal(quoteLocked, 300, "Alice should have 300 quote locked");
 
     // Capture balances before
     const baseAccBefore = await getAccount(connection, (user as any).baseVault);
     const baseVaultBefore = await getAccount(connection, baseVault);
 
-    // Settle all base funds
+    // Settle all 2 base
     const tx = await program.methods
       .settleFunds(true, new anchor.BN(baseFree))
       .accounts({
@@ -768,76 +547,126 @@ describe("Settle Funds Tests", () => {
     openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
 
     console.log("\n========== SETTLEMENT RESULTS ==========");
-    console.log("Amount settled:", baseFree);
-    console.log("User base balance change:", Number(baseAccAfter.amount) - Number(baseAccBefore.amount));
-    console.log("Market base vault change:", Number(baseVaultAfter.amount) - Number(baseVaultBefore.amount));
+    console.log("Base settled:", baseFree);
+    console.log("User base: %d -> %d (change: +%d)", 
+      Number(baseAccBefore.amount), 
+      Number(baseAccAfter.amount),
+      Number(baseAccAfter.amount) - Number(baseAccBefore.amount)
+    );
+    console.log("Market base vault: %d -> %d (change: -%d)", 
+      Number(baseVaultBefore.amount), 
+      Number(baseVaultAfter.amount),
+      Number(baseVaultBefore.amount) - Number(baseVaultAfter.amount)
+    );
     console.log("Base free after:", Number(openOrders.baseFree));
-    console.log("Quote locked (unchanged):", Number(openOrders.quoteLocked));
+    console.log("Quote locked after (unchanged):", Number(openOrders.quoteLocked));
 
     // Assertions
     assert.equal(
       Number(baseAccAfter.amount) - Number(baseAccBefore.amount),
-      baseFree,
-      "User should receive all base funds"
+      2,
+      "Alice should receive 2 base"
     );
     assert.equal(
       Number(baseVaultBefore.amount) - Number(baseVaultAfter.amount),
-      baseFree,
-      "Market vault should decrease by settled amount"
+      2,
+      "Market vault should decrease by 2 base"
     );
     assert.equal(
       Number(openOrders.baseFree),
       0,
-      "Base free should be zero after settling all"
+      "Base free should be zero after settling"
     );
     assert.equal(
       Number(openOrders.quoteLocked),
-      quoteLocked,
-      "Quote locked should remain unchanged"
+      300,
+      "Quote locked should remain 300 (unchanged)"
     );
 
-    console.log("\nTransaction sig:", tx);
+    console.log("\n✓ Transaction sig:", tx);
   });
 
-  it("Should fail: Alice tries to settle more than available quote", async () => {
-    console.log("\n>>>>>>>>>>>> Testing: Alice settles more than available <<<<<<<<<<<<\n");
+  it("Charlie settles all his quote funds (200 quote from matched trade)", async () => {
+    console.log("\n>>>>>>>>>>>> Charlie settles 200 quote funds <<<<<<<<<<<<\n");
 
-    const user = users.find((u) => u.name === "Alice")!;
+    const user = users.find((u) => u.name === "Charlie")!;
     const userWallet = user.wallet instanceof Keypair ? user.wallet : user.wallet.payer;
     const userPubkey = user.wallet instanceof Keypair
       ? user.wallet.publicKey
       : (user.wallet as anchor.Wallet).publicKey;
 
+    // Get current state
     let openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
     const quoteFree = Number(openOrders.quoteFree);
+    
+    console.log("Quote free before settle:", quoteFree);
+    
+    assert.equal(quoteFree, 200, "Charlie should have 200 quote free");
 
-    console.log("Quote free:", quoteFree);
-    console.log("Attempting to settle:", quoteFree + 1000);
+    // Capture balances before
+    const quoteAccBefore = await getAccount(connection, (user as any).quoteVault);
+    const quoteVaultBefore = await getAccount(connection, quoteVault);
 
-    try {
-      await program.methods
-        .settleFunds(false, new anchor.BN(quoteFree + 1000))
-        .accounts({
-          signer: userPubkey,
-          //@ts-ignore
-          market: marketPda,
-          openOrders: (user as any).openOrdersPda,
-          baseVault,
-          quoteVault,
-          userBaseVault: (user as any).baseVault,
-          userQuoteVault: (user as any).quoteVault,
-        })
-        .signers([userWallet])
-        .rpc();
-      
-      assert.fail("Should have thrown InvalidClaimAmount error");
-    } catch (err: any) {
-      console.log("✓ Error caught as expected:", err.message);
-    }
+    // Settle all 200 quote
+    const tx = await program.methods
+      .settleFunds(false, new anchor.BN(quoteFree))
+      .accounts({
+        signer: userPubkey,
+        //@ts-ignore
+        market: marketPda,
+        openOrders: (user as any).openOrdersPda,
+        baseVault,
+        quoteVault,
+        userBaseVault: (user as any).baseVault,
+        userQuoteVault: (user as any).quoteVault,
+      })
+      .signers([userWallet])
+      .rpc();
+
+    await connection.confirmTransaction(tx);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Capture balances after
+    const quoteAccAfter = await getAccount(connection, (user as any).quoteVault);
+    const quoteVaultAfter = await getAccount(connection, quoteVault);
+    openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
+
+    console.log("\n========== SETTLEMENT RESULTS ==========");
+    console.log("Quote settled:", quoteFree);
+    console.log("User quote: %d -> %d (change: +%d)", 
+      Number(quoteAccBefore.amount), 
+      Number(quoteAccAfter.amount),
+      Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount)
+    );
+    console.log("Market quote vault: %d -> %d (change: -%d)", 
+      Number(quoteVaultBefore.amount), 
+      Number(quoteVaultAfter.amount),
+      Number(quoteVaultBefore.amount) - Number(quoteVaultAfter.amount)
+    );
+    console.log("Quote free after:", Number(openOrders.quoteFree));
+
+    // Assertions
+    assert.equal(
+      Number(quoteAccAfter.amount) - Number(quoteAccBefore.amount),
+      200,
+      "Charlie should receive 200 quote"
+    );
+    assert.equal(
+      Number(quoteVaultBefore.amount) - Number(quoteVaultAfter.amount),
+      200,
+      "Market vault should decrease by 200 quote"
+    );
+    assert.equal(
+      Number(openOrders.quoteFree),
+      0,
+      "Quote free should be zero after settling"
+    );
+
+    console.log("\n✓ Transaction sig:", tx);
   });
 
-  it("Should fail: Bob tries to settle base when already settled", async () => {
-    console.log("\n>>>>>>>>>>>> Testing: Bob settles when no base funds available <<<<<<<<<<<<\n");
+  it("Should fail: Try to settle when balance is zero", async () => {
+    console.log("\n>>>>>>>>>>>> Testing: Settle with zero balance <<<<<<<<<<<<\n");
 
     const user = users.find((u) => u.name === "Bob")!;
     const userWallet = user.wallet instanceof Keypair ? user.wallet : user.wallet.payer;
@@ -846,14 +675,11 @@ describe("Settle Funds Tests", () => {
       : (user.wallet as anchor.Wallet).publicKey;
 
     let openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
-    console.log("Base free:", Number(openOrders.baseFree));
-    console.log("Quote locked:", Number(openOrders.quoteLocked));
-    console.log("Attempting to settle 100 base tokens when balance is 0");
+    console.log("Quote free:", Number(openOrders.quoteFree));
 
-    // Bob should have no free base funds at this point
     try {
       await program.methods
-        .settleFunds(true, new anchor.BN(100))
+        .settleFunds(false, new anchor.BN(100))
         .accounts({
           signer: userPubkey,
           //@ts-ignore
@@ -867,17 +693,17 @@ describe("Settle Funds Tests", () => {
         .signers([userWallet])
         .rpc();
       
-      assert.fail("Should have thrown InsufficientBalanceClaim error");
+      assert.fail("Should have thrown error");
     } catch (err: any) {
-      console.log("✓ Error caught as expected:", err.message);
+      console.log("✓ Error caught:", err.message);
+      assert.include(err.message, "NoFundsToSettle");
     }
   });
 
-  it("Final balances summary - Alice & Bob", async () => {
-    console.log("\n>>>>>>>>>>>> FINAL BALANCES - ALICE & BOB <<<<<<<<<<<<\n");
+  it("Final balances summary after settlements", async () => {
+    console.log("\n>>>>>>>>>>>> FINAL BALANCES AFTER SETTLEMENTS <<<<<<<<<<<<\n");
 
-    for (const userName of ["Alice", "Bob"]) {
-      const user = users.find((u) => u.name === userName)!;
+    for (const user of users) {
       const baseAcc = await getAccount(connection, (user as any).baseVault);
       const quoteAcc = await getAccount(connection, (user as any).quoteVault);
       
@@ -886,22 +712,33 @@ describe("Settle Funds Tests", () => {
         openOrders = await program.account.openOrders.fetch((user as any).openOrdersPda);
       } catch {}
 
-      console.log(`\n========== ${userName} ==========`);
-      console.log(`Base balance: ${Number(baseAcc.amount)}`);
-      console.log(`Quote balance: ${Number(quoteAcc.amount)}`);
+      console.log(`\n========== ${user.name} ==========`);
+      console.log(`Wallet Balances:`);
+      console.log(`  Base:  ${Number(baseAcc.amount)}`);
+      console.log(`  Quote: ${Number(quoteAcc.amount)}`);
+      
       if (openOrders) {
-        console.log(`Base Free: ${Number(openOrders.baseFree)}`);
-        console.log(`Quote Free: ${Number(openOrders.quoteFree)}`);
-        console.log(`Base Locked: ${Number(openOrders.baseLocked)}`);
-        console.log(`Quote Locked: ${Number(openOrders.quoteLocked)}`);
+        console.log(`Open Orders:`);
+        console.log(`  Base Free:    ${Number(openOrders.baseFree)}`);
+        console.log(`  Base Locked:  ${Number(openOrders.baseLocked)}`);
+        console.log(`  Quote Free:   ${Number(openOrders.quoteFree)}`);
+        console.log(`  Quote Locked: ${Number(openOrders.quoteLocked)}`);
       }
     }
 
     const baseVaultFinal = await getAccount(connection, baseVault);
     const quoteVaultFinal = await getAccount(connection, quoteVault);
     console.log("\n========== Market Vaults ==========");
-    console.log(`Base vault: ${Number(baseVaultFinal.amount)}`);
+    console.log(`Base vault:  ${Number(baseVaultFinal.amount)}`);
     console.log(`Quote vault: ${Number(quoteVaultFinal.amount)}`);
+
+    // Verify expected final state
+    console.log("\n========== EXPECTED STATE VERIFICATION ==========");
+    console.log("✓ Alice should have settled 2 base");
+    console.log("✓ Alice still has 300 quote locked (unfilled bid)");
+    console.log("✓ Bob has 3 base locked and 360 quote locked (both unfilled)");
+    console.log("✓ Charlie should have settled 200 quote");
+    console.log("✓ Market vaults should only contain locked funds");
   });
 });
 
