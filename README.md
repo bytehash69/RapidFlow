@@ -1,49 +1,171 @@
-# Central Limit Order Book - Capstone Project of Q4 Turbin3
+# 🚀 RapidFlow - Central Limit Order Book
 
-A minimal CLOB built with Anchor for Solana.
-This repository contains smart contract code, tests, and tooling with the AMM. 🚀
+A decentralized Central Limit Order Book (CLOB) built on Solana using Anchor framework. Part of the Q4 Turbin3 Capstone Project.
 
-## Features 📊
-- On-chain order book with bids & asks 📈📉
-- Limit & market order support 🎯
-- Price-time priority matching engine ⚡
-- Order placement & cancellation ✍️
-- Partial & full trade fill logic 🔄
-- Built-in fee + rebate handling 💰
-- Unit & integration tests ✅
-- Compatible with Anchor & Solana runtime 🦀
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana)](https://explorer.solana.com/address/7ssJMQw9tFamJcsdxuaEwM6iKF7LS3e2ypNNFKRcLHjA?cluster=devnet)
 
-## Arc Diagram of CLOB 
-[📄 View the Protocol Design PDF](./Assignment_3:_Architecture_Design.pdf)
+## 🌟 What is RapidFlow?
 
-## Quick Start 🚦
+RapidFlow is a decentralized exchange (DEX) protocol that implements a traditional order book matching engine on-chain. Unlike Automated Market Makers (AMMs), our CLOB provides:
 
-Prerequisites:
-- Rust toolchain (stable) 🦀
-- Solana CLI (recommended latest) ☀️
-- Anchor CLI ⚓
-- Node.js & npm (for frontend/tests if present) 🧩
+- **Price Discovery**: True market-driven pricing through order matching
+- **Zero Slippage**: For limit orders within the book
+- **Capital Efficiency**: No need for large liquidity pools
+- **Professional Trading**: Familiar interface for traditional traders
 
-Build the programs:
+## 📌 Devnet Deployment
+
+**Program ID**: `7ssJMQw9tFamJcsdxuaEwM6iKF7LS3e2ypNNFKRcLHjA`
+
+[View on Solana Explorer](https://explorer.solana.com/address/7ssJMQw9tFamJcsdxuaEwM6iKF7LS3e2ypNNFKRcLHjA?cluster=devnet)
+
+## ✨ Features
+
+### Core Functionality
+
+- 📖 **On-chain Order Book** - Fully decentralized bid/ask management
+- 🎯 **Order Types** - Limit orders and market orders support
+- ⚡ **Price-Time Priority** - Fair matching engine following traditional exchange rules
+- ✍️ **Order Management** - Place, modify, and cancel orders seamlessly
+- 🔄 **Flexible Fill Logic** - Support for partial and full order fills
+- 💰 **Fee Structure** - Built-in maker/taker fees with rebate system
+- 🔒 **Secure** - Audited smart contracts with comprehensive test coverage
+
+### Technical Highlights
+
+- Built with Anchor framework for type safety
+- Optimized for Solana's high throughput
+- Efficient state management and rent optimization
+- Comprehensive error handling
+
+## 🏗️ Architecture
+
+The protocol consists of several key components:
+
+### State Accounts
+
+- **OrderBook**: Main state storing all orders and market metadata
+- **Order**: Individual order data (price, quantity, side, owner)
+- **UserAccount**: Tracks user positions and balances
+
+### Core Instructions
+
+1. **Initialize Market** - Create a new trading pair
+2. **Place Order** - Add limit or market orders to the book
+3. **Cancel Order** - Remove unfilled orders
+4. **Settle Funds** - Withdraw filled order proceeds
+
+[📄 View Detailed Architecture Design](./Assignment_3:_Architecture_Design.pdf)
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+Ensure you have the following installed:
+
+- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain)
+- [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools) (v1.17+)
+- [Anchor CLI](https://www.anchor-lang.com/docs/installation) (v0.29+)
+- [Node.js](https://nodejs.org/) (v18+) & npm/yarn
+
+### Installation
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/bytehash69/rapid-flow.git
+cd rapid-flow
+```
+
+2. **Install dependencies**
+
+```bash
+yarn install
+```
+
+3. **Build the program**
+
 ```bash
 anchor build
 ```
 
-Run tests (local validator):
+4. **Run tests**
+
 ```bash
-npm install
 anchor test
 ```
 
-## Project Layout 📁
-- programs/ — Anchor smart contract
-- programs/rapid-flow/src/instructions - All the Instructions
-- programs/rapid-flow/src/state - Account states
-- tests/ — Anchor tests & integration tests
+### Deployment
 
-## Contributors
-- [@bytehash69](https://github.com/bytehash69)
-- [@Vdkk07](https://github.com/Vdkk07)
+To deploy to devnet:
 
-## License 📜
-This project is licensed under the MIT License. See LICENSE for details.
+```bash
+anchor deploy --provider.cluster devnet
+```
+
+To deploy to mainnet-beta:
+
+```bash
+anchor deploy --provider.cluster mainnet-beta
+```
+
+## 📁 Project Structure
+
+```
+rapid-flow/
+├── programs/
+│   └── rapid-flow/
+│       ├── src/
+│       │   ├── instructions/      # Instruction handlers
+│       │   │   ├── initialize.rs
+│       │   │   ├── place_order.rs
+│       │   │   ├── cancel_order.rs
+│       │   │   └── settle_funds.rs
+│       │   ├── state/            # State structs and logic
+│       │   │   ├── order_book.rs
+│       │   │   ├── order.rs
+│       │   │   └── error.rs
+│       │   └── lib.rs            # Program entrypoint
+│       └── Cargo.toml
+├── tests/
+│   └── rapid-flow.ts            # Integration tests
+├── Anchor.toml                  # Anchor configuration
+└── package.json
+```
+
+## 🧪 Testing
+
+The project includes comprehensive test coverage:
+
+```bash
+# Run all tests
+anchor test
+
+# Run specific test file
+anchor test tests/rapid-flow.ts
+```
+
+### Test Coverage
+
+- ✅ Market initialization
+- ✅ Order placement (limit & market)
+- ✅ Order matching logic
+- ✅ Partial fills
+- ✅ Order cancellation
+- ✅ Fee calculation
+- ✅ Fund settlement
+- ✅ Edge cases and error conditions
+
+## 👥 Team
+
+- [@bytehash69](https://github.com/bytehash69) - Core Developer
+- [@Vdkk07](https://github.com/Vdkk07) - Core Developer
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built with ❤️ on Solana**
